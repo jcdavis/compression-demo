@@ -2,22 +2,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int windowSize = 4096;
-static int minMatchLength = 4;
-static int maxMatchLength = 0x7f;
-static int maxLiteralChainLength = 0x7f;
+static const int windowSize = 4096;
+static const int minMatchLength = 4;
+static const int maxMatchLength = 0x7f;
+static const int maxLiteralChainLength = 0x7f;
 
+/* Look for the longest match from input in the window, storing the pointer in matchPos and
+ * returning its length
+ */
 static int match(char* windowStart, char* windowEnd, char* input, char* inputEnd, char** matchPos) {
   int bestLength = 0;
 
   while(windowStart < windowEnd) {
     int currentMatch = 0; 
-
     while(windowStart+currentMatch < windowEnd && input+currentMatch < inputEnd &&
       windowStart[currentMatch] == input[currentMatch] && currentMatch < maxMatchLength) {
       currentMatch++;
     }
-
+    // Prefer a later match of the same length - smaller offset
     if (currentMatch >= bestLength) {
       bestLength = currentMatch;
       *matchPos = windowStart;
@@ -32,9 +34,8 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
   char* input = inputStart;
   char* inputEnd = input + inputLength;
   char* output = outputStart;
-  char* outputEnd = output + outputLength;
   char* activeLiteral = NULL;
-
+  // Store the uncompressed length at the start
   *(int*)output = inputLength;
   output += sizeof(int);
   
@@ -44,12 +45,15 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
     int matchLength = match(windowStart, input, input, inputEnd, &matchPos);
     
     if (matchLength >= minMatchLength) {
+      // We found a good match. Reset the literal header pointer and emiti the match data
       activeLiteral = NULL;
-      *output++ = matchLength | 0x80;
+      *	output++ = matchLength | 0x80;
       *(unsigned short*)output = (unsigned short)(input-matchPos);
       output += sizeof(unsigned short);
       input += matchLength;
     } else {
+      // No match. If we are already in a literal chain just update the header's count,
+      // otherwise emit a new header. Make sure not to increment a header past its max value.
       if (activeLiteral == NULL || *activeLiteral == maxLiteralChainLength) {
         activeLiteral = output;
         *output++ = 0;
@@ -71,12 +75,14 @@ int decompress(char* input, int inputLength, char** outputRef) {
 
   while(input < inputEnd) {
     if ((*input & 0x80) == 0) {
+      // Highest bit is 0 - write out the literal chain
       unsigned char length = *input++;
       while (length > 0) {
         *output++ = *input++;
         length--;
       }
     } else {
+      // Highest bit is 1 - write out the contents of the match by looking back into output
       unsigned char length = *input++ & 0x7f;
       unsigned short offset = *(unsigned short*)input;
       input += sizeof(unsigned short);
@@ -88,6 +94,8 @@ int decompress(char* input, int inputLength, char** outputRef) {
       }
     }
   }
+  // In any valid situation this should be the same as uncompressedLength, but for debugging
+  // returning the generated length is helpful. 
   return (int)(output-*outputRef);
 }
 
