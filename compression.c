@@ -3,7 +3,8 @@
 #include <string.h>
 
 static int windowSize = 4096;
-static int maxMatchLength = 255;
+static int maxMatchLength = 0x7f;
+static int maxLiteralChainLength = 0x7f;
 
 static int match(char* windowStart, char* windowEnd, char* input, char* inputEnd, char** matchPos) {
   int bestLength = 0;
@@ -12,7 +13,7 @@ static int match(char* windowStart, char* windowEnd, char* input, char* inputEnd
     int currentMatch = 0; 
 
     while(windowStart+currentMatch < windowEnd && input+currentMatch < inputEnd &&
-      windowStart[currentMatch] == input[currentMatch] && currentMatch < maxMatchLength ) {
+      windowStart[currentMatch] == input[currentMatch] && currentMatch < maxMatchLength) {
       currentMatch++;
     }
 
@@ -31,6 +32,8 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
   char* inputEnd = input + inputLength;
   char* output = outputStart;
   char* outputEnd = output + outputLength;
+  char* activeLiteral = NULL;
+
   *(int*)output = inputLength;
   output += sizeof(int);
   
@@ -40,12 +43,17 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
     int matchLength = match(windowStart, input, input, inputEnd, &matchPos);
     
     if (matchLength > 1) {
-      *output++ = (unsigned char)matchLength;
+      activeLiteral = NULL;
+      *output++ = matchLength | 0x80;
       *(unsigned short*)output = (unsigned short)(input-matchPos);
       output += sizeof(unsigned short);
       input += matchLength;
     } else {
-      *output++ = 0;
+      if (activeLiteral == NULL || *activeLiteral == maxLiteralChainLength) {
+        activeLiteral = output;
+        *output++ = 0;
+      }
+      (*activeLiteral)++;
       *output++ = *input;
       input++;
     }
@@ -61,19 +69,21 @@ int decompress(char* input, int inputLength, char** outputRef) {
   char* output = *outputRef;
 
   while(input < inputEnd) {
-    if (*input == 0) { 
-      *output = input[1];
-      output++;
-      input += 2;
+    if ((*input & 0x80) == 0) {
+      unsigned char length = *input++;
+      while (length > 0) {
+        *output++ = *input++;
+        length--;
+      }
     } else {
-      unsigned char len = *input++;
+      unsigned char length = *input++ & 0x7f;
       unsigned short offset = *(unsigned short*)input;
       input += sizeof(unsigned short);
       char* start = output - offset;
 
-      while(len > 0) {
+      while(length > 0) {
         *output++ = *start++;
-        len--;
+        length--;
       }
     }
   }
@@ -102,7 +112,6 @@ void roundtrip(char* string) {
 }
 
 int main(int argc, char** argv) {
-  //roundtrip("AAABABCABCDEABCDEFGH");
   if (argc != 4 || (strcmp(argv[1],"-c") != 0 && strcmp(argv[1], "-d") != 0)) {
     printf("Unexpected arguments. Format is:\ncompression-demo -c/-d inputfile outputfile\n");
     return 1;
@@ -110,7 +119,7 @@ int main(int argc, char** argv) {
   int bufferSize = 640000;
   FILE* inputfp = fopen(argv[2], "r");
   FILE* outputfp = fopen(argv[3], "w");
-  char* input = malloc(bufferSize); //64
+  char* input = malloc(bufferSize);
   int inputLength = fread(input, 1, bufferSize, inputfp);
   char* output = NULL;
   int outputLength;
