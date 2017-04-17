@@ -3,6 +3,7 @@
 #include <string.h>
 
 static int windowSize = 4096;
+static int maxMatchLength = 255;
 
 static int match(char* windowStart, char* windowEnd, char* input, char* inputEnd, char** matchPos) {
   int bestLength = 0;
@@ -11,7 +12,7 @@ static int match(char* windowStart, char* windowEnd, char* input, char* inputEnd
     int currentMatch = 0; 
 
     while(windowStart+currentMatch < windowEnd && input+currentMatch < inputEnd &&
-      windowStart[currentMatch] == input[currentMatch] ) {
+      windowStart[currentMatch] == input[currentMatch] && currentMatch < maxMatchLength ) {
       currentMatch++;
     }
 
@@ -29,6 +30,7 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
   char* input = inputStart;
   char* inputEnd = input + inputLength;
   char* output = outputStart;
+  char* outputEnd = output + outputLength;
   *(int*)output = inputLength;
   output += sizeof(int);
   
@@ -36,11 +38,11 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
     char* windowStart = input-windowSize < inputStart ? inputStart : input-windowSize;
     char* matchPos = NULL;
     int matchLength = match(windowStart, input, input, inputEnd, &matchPos);
-
+    
     if (matchLength > 1) {
-      *output++ = matchLength;
-      *(short*)output = (short)(input-matchPos);
-      output += sizeof(short);
+      *output++ = (unsigned char)matchLength;
+      *(unsigned short*)output = (unsigned short)(input-matchPos);
+      output += sizeof(unsigned short);
       input += matchLength;
     } else {
       *output++ = 0;
@@ -64,9 +66,9 @@ int decompress(char* input, int inputLength, char** outputRef) {
       output++;
       input += 2;
     } else {
-      char len = *input++;
-      short offset = *(short*)input;
-      input += sizeof(short);
+      unsigned char len = *input++;
+      unsigned short offset = *(unsigned short*)input;
+      input += sizeof(unsigned short);
       char* start = output - offset;
 
       while(len > 0) {
@@ -75,26 +77,58 @@ int decompress(char* input, int inputLength, char** outputRef) {
       }
     }
   }
-
-  return 0;
+  return (int)(output-*outputRef);
 }
 
-int main(int argc, char** argv) {
-  char* buf = malloc(4096);
-  char* str = "AAABABCABCDEABCDEFGH";
-  printf("%s\n", str);
-  int result = compress(str, strlen(str)+1, buf, 4096);
-  printf("%d\n", result);
-  for(int i = 0; i<result; i++) {
-    if (buf[i] < 32) {
-      printf("%02d ", buf[i]);
+void roundtrip(char* string) {
+  char* compressed = malloc(4096);
+  char* decompressed = NULL;
+  int compressedLength = compress(string, strlen(string)+1, compressed, 4096);
+  decompress(compressed, compressedLength, &decompressed);
+
+  printf("%s\n", string);
+  printf("%d\n", compressedLength);
+  for(int i = 0; i < compressedLength; i++) {
+    if (compressed[i] < 32) {
+      printf("%02d ", compressed[i]);
     } else {
-      printf("%c ", buf[i]);
+      printf("%c ", compressed[i]);
     }
   }
   printf("\n");
-  char* decompressed = NULL;
-  int decompressedLength = decompress(buf, result, &decompressed);
   printf("%s\n", decompressed);
+  free(compressed);
+  free(decompressed);
+}
+
+int main(int argc, char** argv) {
+  //roundtrip("AAABABCABCDEABCDEFGH");
+  if (argc != 4 || (strcmp(argv[1],"-c") != 0 && strcmp(argv[1], "-d") != 0)) {
+    printf("Unexpected arguments. Format is:\ncompression-demo -c/-d inputfile outputfile\n");
+    return 1;
+  }
+  int bufferSize = 640000;
+  FILE* inputfp = fopen(argv[2], "r");
+  FILE* outputfp = fopen(argv[3], "w");
+  char* input = malloc(bufferSize); //64
+  int inputLength = fread(input, 1, bufferSize, inputfp);
+  char* output = NULL;
+  int outputLength;
+  printf("Before %d\n", inputLength);
+
+  if (strcmp(argv[1], "-c") == 0) {
+    output = malloc(bufferSize);
+    outputLength = compress(input, inputLength, output, bufferSize);
+  } else {
+    outputLength = decompress(input, inputLength, &output);
+  }
+
+  fwrite(output, 1, outputLength, outputfp);
+  printf("After %d\n", outputLength);
+
+  fclose(inputfp);
+  fclose(outputfp);
+  free(input);
+  free(output);
   return 0;
 }
