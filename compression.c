@@ -3,6 +3,7 @@
 #include <string.h>
 
 static int windowSize = 4096;
+static int minMatchLength = 4;
 static int maxMatchLength = 0x7f;
 static int maxLiteralChainLength = 0x7f;
 
@@ -42,7 +43,7 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
     char* matchPos = NULL;
     int matchLength = match(windowStart, input, input, inputEnd, &matchPos);
     
-    if (matchLength > 1) {
+    if (matchLength >= minMatchLength) {
       activeLiteral = NULL;
       *output++ = matchLength | 0x80;
       *(unsigned short*)output = (unsigned short)(input-matchPos);
