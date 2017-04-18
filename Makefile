@@ -7,4 +7,4 @@ clean:
 	rm -rf build
 
 compile: setup
-	${CC} -Wall -O2 -o build/compression-demo *.c
+	${CC} -std=c11 -Wall -O2 -o build/compression-demo *.c
