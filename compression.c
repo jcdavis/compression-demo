@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const int windowSize = 4096;
+static const int windowSize = 4*1024;
 static const int minMatchLength = 4;
-static const int maxMatchLength = 0x7f;
+static const int maxMatchLength = 0x3f;
 static const int maxLiteralChainLength = 0x7f;
 
 /* Look for the longest match from input in the window, storing the pointer in matchPos and
@@ -45,22 +45,27 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
     int matchLength = match(windowStart, input, input, inputEnd, &matchPos);
     
     if (matchLength >= minMatchLength) {
-      // We found a good match. Reset the literal header pointer and emiti the match data
+      // We found a good match. Reset the literal header pointer and emit the match data
       activeLiteral = NULL;
-      *	output++ = matchLength | 0x80;
-      *(unsigned short*)output = (unsigned short)(input-matchPos);
-      output += sizeof(unsigned short);
+      unsigned short offset = (unsigned short)(input-matchPos);
+      if (offset <= 0xff) {
+        *output++ = matchLength | 0x80;
+        *output++ = (unsigned char)offset;
+      } else {
+        *output++ = matchLength | 0xc0;
+        *(unsigned short*)output = offset;
+        output += sizeof(unsigned short);
+      }
       input += matchLength;
     } else {
       // No match. If we are already in a literal chain just update the header's count,
       // otherwise emit a new header. Make sure not to increment a header past its max value.
       if (activeLiteral == NULL || *activeLiteral == maxLiteralChainLength) {
-        activeLiteral = output;
-        *output++ = 0;
+        activeLiteral = output++;
+        *activeLiteral = 0;
       }
       (*activeLiteral)++;
-      *output++ = *input;
-      input++;
+      *output++ = *input++;
     }
   }
   return (int)(output-outputStart);
@@ -83,9 +88,15 @@ int decompress(char* input, int inputLength, char** outputRef) {
       }
     } else {
       // Highest bit is 1 - write out the contents of the match by looking back into output
-      unsigned char length = *input++ & 0x7f;
-      unsigned short offset = *(unsigned short*)input;
-      input += sizeof(unsigned short);
+      unsigned char firstByte = *input++;
+      unsigned char length = firstByte & 0x3f;
+      unsigned short offset;
+      if ((firstByte & 0x40) == 0) {
+        offset = *(unsigned char*)input++;
+      } else {
+        offset = *(unsigned short*)input;
+        input += sizeof(unsigned short);
+      }
       char* start = output - offset;
 
       while(length > 0) {
