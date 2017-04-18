@@ -10,12 +10,12 @@ static const int maxLiteralChainLength = 0x7f;
 /* Look for the longest match from input in the window, storing the pointer in matchPos and
  * returning its length
  */
-static int match(char* windowStart, char* windowEnd, char* input, char* inputEnd, char** matchPos) {
+static int match(char* windowStart, char* input, char* inputEnd, char** matchPos) {
   int bestLength = 0;
 
-  while(windowStart < windowEnd) {
+  while(windowStart < input) {
     int currentMatch = 0; 
-    while(windowStart+currentMatch < windowEnd && input+currentMatch < inputEnd &&
+    while(input+currentMatch < inputEnd &&
       windowStart[currentMatch] == input[currentMatch] && currentMatch < maxMatchLength) {
       currentMatch++;
     }
@@ -42,7 +42,7 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
   while(input < inputEnd) {
     char* windowStart = input-windowSize < inputStart ? inputStart : input-windowSize;
     char* matchPos = NULL;
-    int matchLength = match(windowStart, input, input, inputEnd, &matchPos);
+    int matchLength = match(windowStart, input, inputEnd, &matchPos);
     
     if (matchLength >= minMatchLength) {
       // We found a good match. Reset the literal header pointer and emit the match data
