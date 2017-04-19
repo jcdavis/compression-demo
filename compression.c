@@ -49,10 +49,10 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
       activeLiteral = NULL;
       unsigned short offset = (unsigned short)(input-matchPos);
       if (offset <= 0xff) {
-        *output++ = matchLength | 0x80;
+        *output++ = 0x80 | matchLength;
         *output++ = (unsigned char)offset;
       } else {
-        *output++ = matchLength | 0xc0;
+        *output++ = 0x80 | 0x40 | matchLength;
         *(unsigned short*)output = offset;
         output += sizeof(unsigned short);
       }
@@ -108,27 +108,6 @@ int decompress(char* input, int inputLength, char** outputRef) {
   // In any valid situation this should be the same as uncompressedLength, but for debugging
   // returning the generated length is helpful. 
   return (int)(output-*outputRef);
-}
-
-void roundtrip(char* string) {
-  char* compressed = malloc(4096);
-  char* decompressed = NULL;
-  int compressedLength = compress(string, strlen(string)+1, compressed, 4096);
-  decompress(compressed, compressedLength, &decompressed);
-
-  printf("%s\n", string);
-  printf("%d\n", compressedLength);
-  for(int i = 0; i < compressedLength; i++) {
-    if (compressed[i] < 32) {
-      printf("%02d ", compressed[i]);
-    } else {
-      printf("%c ", compressed[i]);
-    }
-  }
-  printf("\n");
-  printf("%s\n", decompressed);
-  free(compressed);
-  free(decompressed);
 }
 
 int main(int argc, char** argv) {
