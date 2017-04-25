@@ -1,3 +1,5 @@
+CFLAGS =  -std=c11 -Wall -O2
+
 all: setup compile
 
 setup:
@@ -7,4 +9,4 @@ clean:
 	rm -rf build
 
 compile: setup
-	${CC} -std=c11 -Wall -O2 -o build/compression-demo *.c
+	$(CC) $(CFLAGS) -o build/compression-demo *.c
