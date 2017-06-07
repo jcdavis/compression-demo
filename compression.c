@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +11,7 @@ static const int maxLiteralChainLength = 0x7f;
 /* Look for the longest match from input in the window, storing the pointer in matchPos and
  * returning its length
  */
-static int match(char* windowStart, char* input, char* inputEnd, char** matchPos) {
+static int match(uint8_t* windowStart, uint8_t* input, uint8_t* inputEnd, uint8_t** matchPos) {
   int bestLength = 0;
 
   while(windowStart < input) {
@@ -30,31 +31,31 @@ static int match(char* windowStart, char* input, char* inputEnd, char** matchPos
   return bestLength;
 }
 
-int compress(char* inputStart, int inputLength, char* outputStart, int outputLength) {
-  char* input = inputStart;
-  char* inputEnd = input + inputLength;
-  char* output = outputStart;
-  char* activeLiteral = NULL;
+int compress(uint8_t* inputStart, int inputLength, uint8_t* outputStart, int outputLength) {
+  uint8_t* input = inputStart;
+  uint8_t* inputEnd = input + inputLength;
+  uint8_t* output = outputStart;
+  uint8_t* activeLiteral = NULL;
   // Store the uncompressed length at the start
-  *(int*)output = inputLength;
-  output += sizeof(int);
+  *(uint32_t*)output = inputLength;
+  output += sizeof(uint32_t);
   
   while(input < inputEnd) {
-    char* windowStart = input-windowSize < inputStart ? inputStart : input-windowSize;
-    char* matchPos = NULL;
+    uint8_t* windowStart = input-windowSize < inputStart ? inputStart : input-windowSize;
+    uint8_t* matchPos = NULL;
     int matchLength = match(windowStart, input, inputEnd, &matchPos);
     
     if (matchLength >= minMatchLength) {
       // We found a good match. Reset the literal header pointer and emit the match data
       activeLiteral = NULL;
-      unsigned short offset = (unsigned short)(input-matchPos);
+      uint16_t offset = (uint16_t)(input-matchPos);
       if (offset <= 0xff) {
         *output++ = 0x80 | matchLength;
-        *output++ = (unsigned char)offset;
+        *output++ = (uint8_t)offset;
       } else {
         *output++ = 0x80 | 0x40 | matchLength;
-        *(unsigned short*)output = offset;
-        output += sizeof(unsigned short);
+        *(uint16_t*)output = offset;
+        output += sizeof(uint16_t);
       }
       input += matchLength;
     } else {
@@ -71,33 +72,33 @@ int compress(char* inputStart, int inputLength, char* outputStart, int outputLen
   return (int)(output-outputStart);
 }
 
-int decompress(char* input, int inputLength, char** outputRef) {
-  char* inputEnd = input + inputLength;
-  int uncompressedLength = *(int*)input;
-  input += sizeof(int);
+int decompress(uint8_t* input, int inputLength, uint8_t** outputRef) {
+  uint8_t* inputEnd = input + inputLength;
+  int uncompressedLength = *(uint32_t*)input;
+  input += sizeof(uint32_t);
   *outputRef = malloc(uncompressedLength);
-  char* output = *outputRef;
+  uint8_t* output = *outputRef;
 
   while(input < inputEnd) {
     if ((*input & 0x80) == 0) {
       // Highest bit is 0 - write out the literal chain
-      unsigned char length = *input++;
+      uint8_t length = *input++;
       while (length > 0) {
         *output++ = *input++;
         length--;
       }
     } else {
       // Highest bit is 1 - write out the contents of the match by looking back into output
-      unsigned char firstByte = *input++;
-      unsigned char length = firstByte & 0x3f;
-      unsigned short offset;
+      uint8_t firstByte = *input++;
+      uint8_t length = firstByte & 0x3f;
+      uint16_t offset;
       if ((firstByte & 0x40) == 0) {
-        offset = *(unsigned char*)input++;
+        offset = *input++;
       } else {
-        offset = *(unsigned short*)input;
-        input += sizeof(unsigned short);
+        offset = *(uint16_t*)input;
+        input += sizeof(uint16_t);
       }
-      char* start = output - offset;
+      uint8_t* start = output - offset;
 
       while(length > 0) {
         *output++ = *start++;
@@ -118,9 +119,9 @@ int main(int argc, char** argv) {
   int bufferSize = 640000;
   FILE* inputfp = fopen(argv[2], "r");
   FILE* outputfp = fopen(argv[3], "w");
-  char* input = malloc(bufferSize);
+  uint8_t* input = malloc(bufferSize);
   int inputLength = fread(input, 1, bufferSize, inputfp);
-  char* output = NULL;
+  uint8_t* output = NULL;
   int outputLength;
   printf("Before %d\n", inputLength);
 
